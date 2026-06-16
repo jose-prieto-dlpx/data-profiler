@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -48,6 +49,22 @@ class Layer1Rule:
 
 
 @dataclass(frozen=True)
+class DatabaseConfig:
+    host: str = "localhost"
+    port: int = 5432
+    dbname: str = "postgres"
+    user: str = "postgres"
+    password: str = ""
+    sslmode: str = "prefer"
+
+    def to_dsn(self) -> str:
+        return (
+            f"host={self.host} port={self.port} dbname={self.dbname} "
+            f"user={self.user} password={self.password} sslmode={self.sslmode}"
+        )
+
+
+@dataclass(frozen=True)
 class Layer2Config:
     provider: str = "none"
     model: str = ""
@@ -71,6 +88,7 @@ class PipelineConfig:
     layer_1_rules: list[Layer1Rule]
     layer_2: Layer2Config
     security_masking: dict[str, str]
+    database: DatabaseConfig
 
 
 class ConfigManager:
@@ -98,6 +116,7 @@ class ConfigManager:
                 str(k).upper(): str(v).upper()
                 for k, v in (raw.get("security_masking", {}) or {}).items()
             },
+            database=_parse_database(raw.get("database", {})),
         )
         return cls(cfg)
 
@@ -177,4 +196,15 @@ def _parse_layer2(raw: dict) -> Layer2Config:
             )
         ),
         valid_labels=labels,
+    )
+
+
+def _parse_database(raw: dict) -> DatabaseConfig:
+    return DatabaseConfig(
+        host=raw.get("host") or os.getenv("PGHOST", "localhost"),
+        port=int(raw.get("port") or os.getenv("PGPORT", 5432)),
+        dbname=raw.get("dbname") or os.getenv("PGDATABASE", "postgres"),
+        user=raw.get("user") or os.getenv("PGUSER", "postgres"),
+        password=raw.get("password") or os.getenv("PGPASSWORD", ""),
+        sslmode=raw.get("sslmode") or os.getenv("PGSSLMODE", "prefer"),
     )

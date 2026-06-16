@@ -2,6 +2,14 @@ domain: healthcare
 confidence_threshold: 0.8
 sample_size: 20
 
+database:
+  host: localhost                   # or: PGHOST env var
+  port: 5432                        # or: PGPORT env var
+  dbname: postgres                  # or: PGDATABASE env var
+  user: postgres                    # or: PGUSER env var
+  password: ""                      # or: PGPASSWORD env var (use env var for security!)
+  sslmode: prefer                   # or: PGSSLMODE env var
+
 blacklist:
   tables:
     - migration_audit

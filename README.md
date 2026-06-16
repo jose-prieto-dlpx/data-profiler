@@ -91,6 +91,14 @@ domain: healthcare                          # Domain identifier for LLM prompts
 confidence_threshold: 0.8                   # Minimum confidence to stop early
 sample_size: 20                             # Rows sampled per column for analysis
 
+database:                                   # Database connection (config > env vars > defaults)
+  host: localhost                           # or: PGHOST environment variable
+  port: 5432                                # or: PGPORT environment variable
+  dbname: postgres                          # or: PGDATABASE environment variable
+  user: postgres                            # or: PGUSER environment variable
+  password: ""                              # or: PGPASSWORD environment variable
+  sslmode: prefer                           # or: PGSSLMODE environment variable
+
 blacklist:
   tables:                                   # Skip entire tables
     - migration_audit
@@ -152,25 +160,12 @@ security_masking:                           # Category → masking strategy
 D:/Python/Python3104/python.exe main.py \
   --config config/sample_healthcare.yaml \
   --schema public \
-  --host localhost \
-  --port 5432 \
-  --dbname mydb \
-  --user myuser \
-  --password mypassword \
   --output classification_output.csv
 ```
 
-### Using DSN String
+### Using Environment Variables for Secrets
 
-```bash
-D:/Python/Python3104/python.exe main.py \
-  --config config/sample_healthcare.yaml \
-  --schema public \
-  --dsn "host=localhost port=5432 dbname=mydb user=myuser password=mypassword sslmode=prefer" \
-  --output classification_output.csv
-```
-
-### With Environment Variables
+If you want to override database credentials via environment variables (recommended for secrets):
 
 ```bash
 export PGHOST=localhost
@@ -191,15 +186,11 @@ D:/Python/Python3104/python.exe main.py \
 D:/Python/Python3104/python.exe main.py \
   --config config/sample_healthcare.yaml \
   --schema public \
-  --host localhost \
-  --dbname mydb \
-  --user myuser \
-  --password mypassword \
   --output classification_output.csv \
   --debug
 ```
 
-Debug mode enables INFO-level logging with timestamps, logger names, and detailed layer-by-layer traces.
+Debug mode enables DEBUG-level logging with timestamps, logger names, and detailed layer-by-layer traces.
 
 ## Output Format
 
@@ -348,11 +339,11 @@ print("All tests passed!")
 |-------|----------|
 | `ImportError: No module named 'psycopg2'` | Run `pip install psycopg2-binary` |
 | `ImportError: No module named 'yaml'` | Run `pip install pyyaml` |
-| `psycopg2.OperationalError: could not connect to server` | Verify PostgreSQL is running and DSN/credentials are correct |
+| `psycopg2.OperationalError: could not connect to server` | Verify database credentials in YAML config or environment variables (PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD) |
 | `FileNotFoundError: Configuration file not found` | Ensure `--config` path is absolute or relative to the current working directory |
 | `OpenAI API error` | Verify `OPENAI_API_KEY` is set and has billing enabled |
 | `Ollama connection refused` | Ensure Ollama is running (`ollama serve`) on `localhost:11434` |
-| CSV output is empty | Check `--schema` argument matches the target schema name (e.g., "public") |
+| CSV output is empty | Check `--schema` argument matches the target schema name (e.g., "public")
 
 ## Dependencies
 
