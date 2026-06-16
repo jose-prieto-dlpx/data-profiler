@@ -1,0 +1,77 @@
+domain: healthcare
+confidence_threshold: 0.8
+sample_size: 20
+
+blacklist:
+  tables:
+    - migration_audit
+  columns:
+    - created_at
+    - updated_at
+  table_columns:
+    - table: users
+      column: password_hash
+
+layer_0_rules:
+  - table_name: patients
+    column_name: first_name
+    category: NAME
+    confidence: 0.98
+  - table_name: patients
+    column_name: last_name
+    category: NAME
+    confidence: 0.98
+  - table_regex: ".*patient.*"
+    column_regex: ".*ssn.*"
+    category: SSN
+    confidence: 0.95
+  - table_regex: ".*billing.*"
+    column_regex: ".*email.*"
+    category: EMAIL
+    confidence: 0.90
+
+layer_1_rules:
+  - category: EMAIL
+    regex: "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
+    confidence: 0.92
+  - category: PHONE
+    regex: "^(\\+?\\d{1,2}[\\s.-]?)?(\\(?\\d{3}\\)?[\\s.-]?)?\\d{3}[\\s.-]?\\d{4}$"
+    confidence: 0.88
+  - category: SSN
+    regex: "^\\d{3}-\\d{2}-\\d{4}$"
+    confidence: 0.97
+  - category: DATE_OF_BIRTH
+    regex: "^(19|20)\\d{2}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+    confidence: 0.86
+
+layer_2_rules:
+  provider: none
+  model: ""
+  temperature: 0.0
+  timeout_seconds: 30
+  max_tokens: 256
+  system_prompt_template: |
+    You are a strict data-classification model for the {domain} domain.
+    You MUST classify database columns using only these labels: {valid_labels}.
+    Return JSON only, with this exact schema:
+    {"category": "<LABEL>", "confidence": <0_to_1_float>}
+    Do not include extra keys or explanatory text.
+  valid_labels:
+    - NAME
+    - EMAIL
+    - PHONE
+    - SSN
+    - DATE_OF_BIRTH
+    - ADDRESS
+    - ACCOUNT_NUMBER
+    - NON_SENSITIVE
+    - UNKNOWN
+
+security_masking:
+  NAME: PSEUDONYMIZE
+  EMAIL: PARTIAL_MASK
+  PHONE: PARTIAL_MASK
+  SSN: HASH
+  DATE_OF_BIRTH: REDACT
+  ADDRESS: REDACT
+  ACCOUNT_NUMBER: HASH
