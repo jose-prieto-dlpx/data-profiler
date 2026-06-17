@@ -30,22 +30,38 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=DEFAULT_CONFIG_PATH,
         help="Path to the classifier configuration YAML file.",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug logging and Flask debug mode.",
+    )
     return parser.parse_args(argv)
 
 
+def _configure_logger(debug: bool) -> None:
+    global logger
+    logger = create_json_logger("data_classifier_service", debug=debug)
+
+
 def _resolve_config_path(payload: dict) -> str:
-    return str(payload.get("config_path") or app.config["CONFIG_PATH"])
+    config_path = str(payload.get("config_path") or app.config["CONFIG_PATH"])
+    logger.debug("Resolved classifier config path: %s", config_path)
+    return config_path
 
 
 def _get_runtime_dependencies(payload: dict) -> tuple[str, object, LayerRouter, str]:
     config_path = _resolve_config_path(payload)
+    logger.debug("Loading classifier runtime dependencies for config %s", config_path)
     config = ConfigLoader.load(config_path)
 
     router = router_cache.get(config_path)
     if router is None:
+        logger.debug("LayerRouter cache miss for config %s; creating router", config_path)
         router = LayerRouter(config, logger=logger)
         router_cache[config_path] = router
         logger.info("Data classifier initialized for config %s", config_path)
+    else:
+        logger.debug("LayerRouter cache hit for config %s", config_path)
 
     return config_path, config, router, config.services.data_reader_url
 
@@ -59,6 +75,7 @@ def health():
 def classify_column():
     try:
         payload = request.get_json() or {}
+        logger.debug("Classifier request payload keys: %s", sorted(payload.keys()))
         schema = payload.get("schema_name", "public")
         table = payload.get("table_name")
         column = payload.get("column_name")
@@ -70,6 +87,15 @@ def classify_column():
 
         # Fetch samples from data reader
         try:
+            logger.debug(
+                "Calling data reader sample endpoint: url=%s schema=%s table=%s column=%s limit=%d config=%s",
+                data_reader_url,
+                schema,
+                table,
+                column,
+                config.sample_size,
+                config_path,
+            )
             resp = requests.get(
                 f"{data_reader_url}/sample/{schema}/{table}/{column}",
                 params={
@@ -78,8 +104,10 @@ def classify_column():
                 },
                 timeout=10,
             )
+            logger.debug("Data reader response status: %d", resp.status_code)
             resp.raise_for_status()
             sample_payload = resp.json() or {}
+            logger.debug("Data reader payload keys: %s", sorted(sample_payload.keys()))
             sample_error = sample_payload.get("error")
             if sample_error:
                 logger.error(
@@ -103,11 +131,14 @@ def classify_column():
                     notes="Column classification skipped due to sample retrieval error.",
                     error=str(sample_error),
                 )
+                logger.debug("Returning ERROR classification due to data reader sample error")
                 return jsonify(error_result.to_dict()), 200
             samples = sample_payload.get("samples", [])
+            logger.debug("Received %d samples for %s.%s.%s", len(samples), schema, table, column)
         except Exception:
             logger.exception("Failed to fetch samples from data reader")
             samples = []
+            logger.debug("Proceeding with empty samples after data reader fetch failure")
 
         # Classify
         col = ColumnMetadata(
@@ -117,6 +148,13 @@ def classify_column():
             data_type=data_type,
         )
         result = router.classify(col, samples)
+        logger.debug(
+            "Router classification result: status=%s category=%s confidence=%.4f decided_by=%s",
+            result.status,
+            result.category,
+            result.confidence,
+            result.decided_by,
+        )
         logger.info(
             "Classified %s.%s.%s -> %s (confidence=%.4f) using config %s",
             schema,
@@ -139,7 +177,9 @@ def classify_column():
 
 if __name__ == "__main__":
     args = parse_args(sys.argv[1:])
+    _configure_logger(args.debug)
     app.config["CONFIG_PATH"] = args.config_path
     logger.info("Starting Data Classifier Service on port %d", args.port)
     logger.info("Using default config path %s", args.config_path)
-    app.run(host="0.0.0.0", port=args.port, debug=False)
+    logger.info("Debug mode enabled: %s", args.debug)
+    app.run(host="0.0.0.0", port=args.port, debug=args.debug, use_reloader=False)

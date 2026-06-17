@@ -2,6 +2,7 @@ $ErrorActionPreference = 'Stop'
 
 $logDir = Join-Path -Path $PSScriptRoot -ChildPath 'logs'
 $configPath = '.\config\sample_healthcare.yaml'
+$enableDebug = $true
 
 if (-not (Test-Path -Path $logDir)) {
     New-Item -ItemType Directory -Path $logDir | Out-Null
@@ -37,9 +38,14 @@ $services = @(
 foreach ($service in $services) {
     Write-Host ("Starting {0} Service (port {1})..." -f $service.Name, $service.Port)
 
+    $arguments = @($service.Script, $service.Port, '--config', $configPath)
+    if ($enableDebug) {
+        $arguments += '--debug'
+    }
+
     Start-Process `
         -FilePath 'python' `
-        -ArgumentList @($service.Script, $service.Port, '--config', $configPath) `
+        -ArgumentList $arguments `
         -WorkingDirectory $PSScriptRoot `
         -WindowStyle Normal `
         -RedirectStandardOutput $service.LogFile `
@@ -49,6 +55,7 @@ foreach ($service in $services) {
 Write-Host ''
 Write-Host 'All services started as separate python processes.'
 Write-Host ('Logs available in: {0}' -f $logDir)
+Write-Host ('Debug mode enabled: {0}' -f $enableDebug)
 Write-Host 'Stdout logs: data_reader.log, data_classifier.log, orchestrator.log'
 Write-Host 'Stderr logs: data_reader.err.log, data_classifier.err.log, orchestrator.err.log'
 Write-Host ''
