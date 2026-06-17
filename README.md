@@ -1,387 +1,213 @@
-# Automated Data Classification and Masking Pipeline
+# Distributed Data Classification Pipeline
 
-A robust, modular Python system for analyzing database schemas, classifying columns by data sensitivity using multi-layer heuristics and LLM fallback, and generating actionable masking recommendations.
-
-## Features
-
-- **4-Layer Routing-by-Confidence Architecture**: Progressive classification from fast schema rules → local regex patterns → LLM intelligence with graceful fallback
-- **Blacklist Filter**: Skip explicitly excluded tables/columns immediately
-- **Empty Column Detection**: Identify and skip columns with 100% NULL/empty values before expensive processing
-- **PostgreSQL Integration**: Safe schema introspection with connection pooling and exception resilience
-- **LLM Abstraction**: Provider-agnostic layer supporting OpenAI, Ollama, or local-only mode
-- **YAML Domain Configuration**: Centralized, domain-specific rules (healthcare, finance, etc.) with default fallbacks
-- **Security Masking Mapping**: Link classified categories to concrete masking strategies (HASH, REDACT, PSEUDONYMIZE, etc.)
-- **CSV Export**: Tabular output with confidence scores, decided-by layer attribution, and error tracking
-- **Debug Logging**: Comprehensive structured logging across all layers
+A scalable, three-service architecture for automated PostgreSQL data classification.
 
 ## Architecture
 
-### Module Breakdown
+Three independent, horizontally scalable REST services:
+
+### 1. Data Reader Service (port 5001)
+
+- Reads database schema metadata and sample values
+- Uses `--config` at startup and optional `config_path` query parameter per request
+- Endpoints:
+  - `GET /health` – Service health check
+  - `GET /schema/{schema_name}` – Returns all columns in schema
+  - `GET /sample/{schema}/{table}/{column}?limit=20` – Returns sample values
+
+### 2. Data Classifier Service (port 5002)
+
+- Performs 4-layer classification pipeline
+- Calls Data Reader to fetch samples
+- Uses `--config` at startup and optional `config_path` in the request body
+- Endpoints:
+  - `GET /health` – Service health check
+  - `POST /classify` – Classifies a single column (JSON payload)
+
+### 3. Orchestrator Service (port 5000)
+
+- Top-level API for end-to-end analysis
+- Coordinates readers and classifiers in parallel
+- Exports results to CSV and pretty-printed table
+- Uses `--config` at startup and optional `config_path` in the request body
+- Endpoints:
+  - `GET /health` – Service health check
+  - `POST /analyze` – Triggers full analysis on a schema
+
+## Modules
 
 | Module | Purpose |
 | ------ | ------- |
-| `models.py` | Typed dataclasses for metadata, decisions, and pipeline results |
-| `database_generic.py` | Abstract database interface (connect, schema introspection, sampling) |
-| `database_postgres.py` | PostgreSQL concrete implementation with pooling and safe SQL composition |
-| `config_manager.py` | YAML parsing, validation, and rule matching for all layers |
-| `local_classifier.py` | Layer 1: regex-based pattern matching for fast local classification |
-| `llm_clients.py` | Layer 2: LLM provider abstraction (OpenAI, Ollama, NoOp) with JSON parsing |
-| `classification_pipeline.py` | Core orchestrator: filter 0 → layers 0–3 with confidence routing |
-| `export_manager.py` | CSV formatter and writer |
-| `main.py` | CLI entrypoint with DSN/env fallback and lifecycle management |
-
-### Processing Flow (Per Column)
-
-```
-Column Input
-    ↓
-[Filter 0: Blacklist Check]
-    ↓ (if excluded → EXCLUDED)
-    ↓ (if not excluded → continue)
-[Layer 0: Metadata/Schema Match]
-    ↓ (confidence ≥ threshold → CLASSIFIED + Layer 3)
-    ↓ (else → continue)
-[Empty Column Check]
-    ↓ (100% NULL/empty → EMPTY_COLUMN)
-    ↓ (else → continue)
-[Layer 1: Local Regex Classifier]
-    ↓ (confidence ≥ threshold → CLASSIFIED + Layer 3)
-    ↓ (else → continue)
-[Layer 2: LLM Fallback]
-    ↓ (returns category + confidence, validated against closed label set)
-[Layer 3: Security Masking Lookup]
-    ↓
-CSV Row Output
-```
+| `models.py` | DTOs for API communication (ColumnMetadata, ClassificationResult) |
+| `config_loader.py` | YAML config parsing with defaults and fallbacks |
+| `database_reader.py` | PostgreSQL metadata and sample fetcher |
+| `layer_router.py` | 4-layer classification logic (filter, layer 0-1) |
+| `data_reader_service.py` | REST service for schema/sample access |
+| `data_classifier_service.py` | REST service for classification |
+| `orchestrator_service.py` | Top-level REST API coordinating workflow |
+| `results_exporter.py` | CSV and pretty-table formatters |
 
 ## Installation
 
-### Prerequisites
-
-- Python 3.10 or higher
-- PostgreSQL 12+ (with network access)
-
-### Setup
-
-1. **Clone/download the project** and navigate to the directory:
-
-   ```bash
-   cd Profiler-demo
-   ```
-
-2. **Create a virtual environment** (optional but recommended):
-
-   ```bash
-   python.exe -m venv venv
-   venv/Scripts/activate  # On Windows
-   # or: source venv/bin/activate  # On macOS/Linux
-   ```
-
-3. **Install dependencies**:
-
-   ```bash
-   python.exe -m pip install -r requirements.txt
-   ```
+```bash
+pip install -r requirements.txt
+```
 
 ## Configuration
 
-### YAML Schema
-
-Create or edit a YAML config file (e.g., `config/sample_healthcare.yaml`):
+Edit `config/sample_healthcare.yaml` (or create new domain-specific config):
 
 ```yaml
-domain: healthcare                          # Domain identifier for LLM prompts
-confidence_threshold: 0.8                   # Minimum confidence to stop early
-sample_size: 20                             # Rows sampled per column for analysis
+domain: healthcare
+confidence_threshold: 0.8
+sample_size: 20
 
-database:                                   # Database connection (config > env vars > defaults)
-  host: localhost                           # or: PGHOST environment variable
-  port: 5432                                # or: PGPORT environment variable
-  dbname: postgres                          # or: PGDATABASE environment variable
-  user: postgres                            # or: PGUSER environment variable
-  password: ""                              # or: PGPASSWORD environment variable
-  sslmode: prefer                           # or: PGSSLMODE environment variable
+services:
+  data_reader_url: http://localhost:5001
+  classifiers:
+    - http://localhost:5002
 
-blacklist:
-  tables:                                   # Skip entire tables
-    - migration_audit
-  columns:                                  # Skip columns by name
-    - created_at
-    - updated_at
-  table_columns:                            # Skip specific table-column pairs
-    - table: users
-      column: password_hash
+database:
+  host: fx-pg16.dlpxdc.co
+  port: 5432
+  dbname: healthcare
+  user: postgres
+  # password: ""  # use PGPASSWORD env var for security
+  sslmode: prefer
 
-layer_0_rules:                              # Schema/metadata exact/regex matches
-  - table_name: patients
-    column_name: first_name
-    category: NAME
-    confidence: 0.98
-  - table_regex: ".*patient.*"              # Regex pattern on table name
-    column_regex: ".*ssn.*"                 # Regex pattern on column name
-    category: SSN
-    confidence: 0.95
+# ... rest of classification rules (layer_0, layer_1, layer_2, etc.)
+```
 
-layer_1_rules:                              # Local regex patterns on sample values
-  - category: EMAIL
-    regex: "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
-    confidence: 0.92
-  - category: SSN
-    regex: "^\\d{3}-\\d{2}-\\d{4}$"
-    confidence: 0.97
+## Running the Services
 
-layer_2_rules:                              # LLM configuration
-  provider: none                            # "none", "openai", or "ollama"
-  model: ""                                 # e.g., "gpt-4-turbo" or "llama2"
-  temperature: 0.0                          # LLM temperature
-  timeout_seconds: 30
-  max_tokens: 256
-  system_prompt_template: |
-    You are a strict data-classification model for the {domain} domain.
-    Classify using only: {valid_labels}
-    Return JSON: {"category": "<LABEL>", "confidence": <0_to_1>}
-  valid_labels:                             # Closed set of allowed labels
-    - NAME
-    - EMAIL
-    - PHONE
-    - SSN
-    - DATE_OF_BIRTH
-    - UNKNOWN
+### Option 1: Manual (3 terminal windows)
 
-security_masking:                           # Category → masking strategy
-  NAME: PSEUDONYMIZE
-  EMAIL: PARTIAL_MASK
-  SSN: HASH
-  DATE_OF_BIRTH: REDACT
+**Terminal 1 – Data Reader:**
+
+```bash
+python data_reader_service.py 5001 --config config/sample_healthcare.yaml
+```
+
+**Terminal 2 – Data Classifier:**
+
+```bash
+python data_classifier_service.py 5002 --config config/sample_healthcare.yaml
+```
+
+**Terminal 3 – Orchestrator:**
+
+```bash
+python orchestrator_service.py 5000 --config config/sample_healthcare.yaml
+```
+
+### Option 2: Startup Script
+
+```bash
+./start-services.sh
 ```
 
 ## Usage
 
-### Basic Invocation
+### Trigger Analysis
 
 ```bash
-D:/Python/Python3104/python.exe main.py \
-  --config config/sample_healthcare.yaml \
-  --schema public \
-  --output classification_output.csv
+curl -X POST http://localhost:5000/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"schema": "public", "output_file": "results.csv", "config_path": "config/sample_healthcare.yaml"}'
 ```
 
-### Using Environment Variables for Secrets
+### Response
 
-If you want to override database credentials via environment variables (recommended for secrets):
+```json
+{
+  "total_columns": 42,
+  "classified": 42,
+  "output_file": "results.csv",
+  "config_path": "config/sample_healthcare.yaml",
+  "data_reader_url": "http://localhost:5001",
+  "classifiers": ["http://localhost:5002"],
+  "results_preview": "schema_name | table_name | column_name | status | category | ..."
+}
+```
+
+## Scalability
+
+To handle large databases:
+
+1. **Multiple Data Readers**: Start additional reader instances on different ports
+
+   ```bash
+   python data_reader_service.py 5011
+   python data_reader_service.py 5012
+   ```
+
+2. **Multiple Classifiers**: Start additional classifier instances
+
+   ```bash
+   python data_classifier_service.py 5021
+   python data_classifier_service.py 5022
+   ```
+
+3. **Update the YAML config**: Add classifier URLs to load-balance
+
+   ```yaml
+   services:
+     data_reader_url: http://localhost:5001
+     classifiers:
+       - http://localhost:5002
+       - http://localhost:5021
+       - http://localhost:5022
+   ```
+
+## API Contract
+
+### Data Reader
+
+- **GET /schema/{schema}** → `{"columns": [{"schema_name", "table_name", "column_name", "data_type"}]}`
+- **GET /sample/{schema}/{table}/{column}** → `{"samples": [value1, value2, null, ...]}`
+- **GET /sample/{schema}/{table}/{column}** (sample read error) → `{"samples": [], "error": "Failed to sample schema.table.column: ..."}`
+- Optional query parameter on both endpoints: `config_path=config/sample_healthcare.yaml`
+
+### Data Classifier
+
+- **POST /classify** ← `{"schema_name", "table_name", "column_name", "data_type", "config_path"}`
+- **POST /classify** → `{"schema_name", "table_name", "column_name", ..., "category", "confidence", "sensitive", "masking_method", ...}`
+- **POST /classify** (reader sample error) → `{"schema_name", "table_name", "column_name", "status": "ERROR", "category": "UNKNOWN", "confidence": 0.0, "decided_by": "data_reader", "error": "..."}`
+
+### Orchestrator
+
+- **POST /analyze** ← `{"schema": "public", "output_file": "results.csv", "config_path"}`
+- **POST /analyze** → `{"total_columns": N, "classified": N, "output_file": "...", "config_path": "...", "data_reader_url": "...", "classifiers": [...], "results_preview": "..."}`
+
+## Environment Variables
 
 ```bash
 export PGHOST=localhost
 export PGPORT=5432
-export PGDATABASE=mydb
-export PGUSER=myuser
-export PGPASSWORD=mypassword
-
-D:/Python/Python3104/python.exe main.py \
-  --config config/sample_healthcare.yaml \
-  --schema public \
-  --output classification_output.csv
+export PGDATABASE=healthcare
+export PGUSER=postgres
+export PGPASSWORD=your_password
+export PGSSLMODE=prefer
 ```
 
-### Debug Mode
+All are optional; YAML config takes precedence.
 
-```bash
-D:/Python/Python3104/python.exe main.py \
-  --config config/sample_healthcare.yaml \
-  --schema public \
-  --output classification_output.csv \
-  --debug
-```
+## Output
 
-Debug mode enables DEBUG-level logging with timestamps, logger names, and detailed layer-by-layer traces.
+CSV file with columns:
 
-## Output Format
+- `schema_name`, `table_name`, `column_name`, `data_type`
+- `status`, `category`, `confidence`
+- `sensitive`, `masking_method`
+- `decided_by`, `notes`, `reasoning`, `error`
 
-The CSV contains one row per discovered column:
-
-| Column | Description |
-|--------|-------------|
-| `schema_name` | Schema (e.g., "public") |
-| `table_name` | Table name |
-| `column_name` | Column name |
-| `data_type` | PostgreSQL data type (e.g., "varchar", "integer") |
-| `status` | One of: CLASSIFIED, UNCLASSIFIED, EXCLUDED, EMPTY_COLUMN, ERROR |
-| `category` | Assigned category (e.g., "NAME", "EMAIL", "UNKNOWN") |
-| `confidence` | Float in [0.0, 1.0], to 4 decimal places |
-| `sensitive` | "TRUE" or "FALSE" |
-| `masking_method` | Masking strategy (e.g., "HASH", "REDACT") or empty if not sensitive |
-| `decided_by` | Layer that made the decision: filter_0, layer_0, empty_check, layer_1, layer_2, or pipeline |
-| `notes` | Human-readable rationale or error details |
-| `error` | Exception message if status=ERROR, else empty |
-
-### Example Output
-
-```csv
-schema_name,table_name,column_name,data_type,status,category,confidence,sensitive,masking_method,decided_by,notes,error
-public,patients,id,integer,CLASSIFIED,UNKNOWN,0.0000,FALSE,,layer_1,Best regex rule matched with score=0.0000.,
-public,patients,first_name,varchar,CLASSIFIED,NAME,0.9800,TRUE,PSEUDONYMIZE,layer_0,Matched schema metadata rule.,
-public,patients,email,varchar,CLASSIFIED,EMAIL,0.9200,TRUE,PARTIAL_MASK,layer_1,Best regex rule '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]' score=0.9200.,
-public,patients,created_at,timestamp,EXCLUDED,EXCLUDED,1.0000,FALSE,,filter_0,Column matched blacklist rules.,
-public,patients,last_modified,timestamp,EMPTY_COLUMN,EMPTY_COLUMN,1.0000,FALSE,,empty_check,Sample values are 100% empty or NULL.,
-```
-
-## Error Handling
-
-- **Database Connectivity Failures**: Logged and reported; pipeline continues if schema introspection succeeds for at least one column.
-- **Blacklist/Rule Parsing Errors**: Configuration errors are caught early; if a rule is malformed, it is skipped with a warning.
-- **LLM Timeout/API Errors**: Layer 2 failures degrade gracefully; the pipeline retains the best Layer 1 classification (if any).
-- **Invalid JSON from LLM**: Unparseable responses are caught; JSON extraction via regex fallback is attempted.
-- **Per-Column Exceptions**: Any unhandled error during a column's processing is caught, logged, and marked as ERROR in the output row; the pipeline continues.
-
-## Logging
-
-All modules emit structured logs to `stdout` with timestamps:
-
-```
-2026-06-16 12:34:56,789 | DEBUG | classification_pipeline | Processing column: public.patients.first_name
-2026-06-16 12:34:57,123 | INFO | main | Discovered 42 columns in schema 'public'.
-2026-06-16 12:34:58,456 | INFO | main | Classification finished. CSV written to 'classification_output.csv'.
-```
-
-Enable debug logging with the `--debug` flag to see layer-by-layer decisions and LLM payloads.
-
-## Advanced Configuration
-
-### Using OpenAI
-
-1. Set the `OPENAI_API_KEY` environment variable:
-   ```bash
-   export OPENAI_API_KEY=sk-...
-   ```
-
-2. Update your YAML config:
-   ```yaml
-   layer_2_rules:
-     provider: openai
-     model: gpt-4-turbo
-     temperature: 0.0
-     timeout_seconds: 30
-     max_tokens: 256
-   ```
-
-3. Run the pipeline as normal.
-
-### Using Ollama
-
-1. Start a local Ollama service (e.g., on `http://localhost:11434`):
-   ```bash
-   ollama pull llama2
-   ollama serve
-   ```
-
-2. Update your YAML config:
-   ```yaml
-   layer_2_rules:
-     provider: ollama
-     model: llama2
-     temperature: 0.0
-     timeout_seconds: 60
-   ```
-
-3. Run the pipeline.
-
-### Custom Domain Config
-
-Create a new YAML file for your domain (e.g., `config/sample_finance.yaml`) with domain-specific rules:
-
-```yaml
-domain: finance
-layer_0_rules:
-  - table_name: accounts
-    column_name: account_number
-    category: ACCOUNT_NUMBER
-    confidence: 0.99
-  - table_name: transactions
-    column_regex: ".*amount.*"
-    category: FINANCIAL_AMOUNT
-    confidence: 0.85
-
-security_masking:
-  ACCOUNT_NUMBER: HASH
-  FINANCIAL_AMOUNT: REDACT
-```
-
-## Testing
-
-### Quick Sanity Check
-
-```bash
-D:/Python/Python3104/python.exe -m compileall .
-```
-
-This compiles all modules to check for syntax errors.
-
-### Unit Testing (Optional)
-
-Create a `test_*.py` file to verify individual components:
-
-```python
-from config_manager import ConfigManager
-from models import ColumnMetadata
-
-# Test config loading
-cfg = ConfigManager.load_from_file("config/sample_healthcare.yaml")
-assert cfg.config.domain == "healthcare"
-
-# Test blacklist matching
-assert cfg.is_blacklisted("migration_audit", "any_column") == True
-assert cfg.is_blacklisted("users", "password_hash") == True
-assert cfg.is_blacklisted("users", "name") == False
-
-print("All tests passed!")
-```
-
-## Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| `ImportError: No module named 'psycopg2'` | Run `pip install psycopg2-binary` |
-| `ImportError: No module named 'yaml'` | Run `pip install pyyaml` |
-| `psycopg2.OperationalError: could not connect to server` | Verify database credentials in YAML config or environment variables (PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD) |
-| `FileNotFoundError: Configuration file not found` | Ensure `--config` path is absolute or relative to the current working directory |
-| `OpenAI API error` | Verify `OPENAI_API_KEY` is set and has billing enabled |
-| `Ollama connection refused` | Ensure Ollama is running (`ollama serve`) on `localhost:11434` |
-| CSV output is empty | Check `--schema` argument matches the target schema name (e.g., "public")
-
-## Dependencies
-
-- **pyyaml** ≥ 6.0 – YAML parsing
-- **psycopg2-binary** ≥ 2.9 – PostgreSQL adapter
-- **openai** ≥ 1.0 – OpenAI API client (optional, only if using provider=openai)
-
-Optional:
-- **spacy** – For advanced NLP (future Layer 1 enhancement)
-
-## Performance Notes
-
-- **Schema Introspection**: O(n) where n = number of columns in schema. Typically < 1s for schemas with < 1000 columns.
-- **Sampling**: 20 rows per column by default; configurable via `sample_size` in YAML.
-- **Layer 1 (Regex)**: Very fast; O(sample_size × number_of_rules).
-- **Layer 2 (LLM)**: Dependent on LLM latency; typically 1–5s per column. Skipped if Layer 1 meets confidence threshold.
-- **Typical End-to-End**: 50–100 columns = 30–120 seconds (without LLM) or 5–15 minutes (with LLM).
-
-## Contributing
-
-To extend the pipeline:
-
-1. Add new LLM providers by subclassing `LLMClient` in `llm_clients.py`.
-2. Add new Layer 1 classifiers in `local_classifier.py` (e.g., spaCy NER).
-3. Extend the YAML schema in `config_manager.py` for domain-specific rules.
-4. Add new masking strategies to the `security_masking` section in your YAML.
-
-## License
-
-MIT or your preferred license. Update as needed.
-
-## Contact
-
-For questions or issues, open a GitHub issue or contact the project maintainers.
+Console output shows a pretty-printed summary (without `reasoning` and `error` fields).
 
 ---
 
-**Built with Python 3.10+, PostgreSQL, and modular architecture for production-ready data governance.**
+**Architecture principles:**
+
+- **Separation of concerns**: Each service has one responsibility
+- **Stateless**: Services can be replicated and load-balanced
+- **JSON API**: Simple HTTP REST for inter-service communication
+- **Minimal dependencies**: Flask, psycopg2, PyYAML only

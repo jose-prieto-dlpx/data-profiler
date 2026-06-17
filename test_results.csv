@@ -1,0 +1,10 @@
+schema_name,table_name,column_name,data_type,status,category,confidence,sensitive,masking_method,decided_by,notes,reasoning,error
+public,claims,customer_id,integer,UNCLASSIFIED,UNKNOWN,0.0000,FALSE,,Layer 2 - LLM Fallback,No layer met confidence threshold.,,
+public,claims,medical_notes,text,UNCLASSIFIED,UNKNOWN,0.0000,FALSE,,Layer 2 - LLM Fallback,No layer met confidence threshold.,,
+public,claims,claim_amount,integer,EXCLUDED,EXCLUDED,1.0000,FALSE,,Filter 0 - Blacklist,Blacklisted.,,
+public,claims,claim_id,integer,UNCLASSIFIED,UNKNOWN,0.0000,FALSE,,Layer 2 - LLM Fallback,No layer met confidence threshold.,,
+public,customers,customer_id,integer,UNCLASSIFIED,UNKNOWN,0.0000,FALSE,,Layer 2 - LLM Fallback,No layer met confidence threshold.,,
+public,customers,last_name,character varying,CLASSIFIED,NAME,0.9800,TRUE,FULL_NAME_ALGORITHM,Layer 0 - Schema Rules,Schema match.,,
+public,customers,first_name,character varying,CLASSIFIED,NAME,0.9800,TRUE,FULL_NAME_ALGORITHM,Layer 0 - Schema Rules,Schema match.,,
+public,customers,email_address,character varying,CLASSIFIED,EMAIL,0.9200,TRUE,EMAIL_UNIQUE,Layer 1 - Regex Rules,"Best match: ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$, score=0.9200",,
+public,customers,national_identifier,character varying,CLASSIFIED,PHONE,0.8800,TRUE,PARTIAL_MASK,Layer 1 - Regex Rules,"Best match: ^(\+?\d{1,2}[\s.-]?)?(\(?\d{3}\)?[\s.-]?)?\d{3}[\s.-]?\d{4}$, score=0.8800",,

@@ -1,49 +1,37 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from typing import Any
 
 
-@dataclass(frozen=True)
+@dataclass
 class ColumnMetadata:
+    """Database column metadata from data reader."""
     schema_name: str
     table_name: str
     column_name: str
     data_type: str
-    ordinal_position: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
 
 @dataclass
-class ClassificationDecision:
+class ClassificationResult:
+    """Classification result from classifier service."""
+    schema_name: str
+    table_name: str
+    column_name: str
+    data_type: str
     status: str
     category: str
     confidence: float
+    sensitive: bool
+    masking_method: str
     decided_by: str
-    sensitive: bool = False
-    masking_method: str = ""
-    notes: str = ""
-    error: str = ""
+    notes: str
     reasoning: str = ""
+    error: str = ""
 
-
-@dataclass
-class PipelineResult:
-    column: ColumnMetadata
-    decision: ClassificationDecision
-
-    def to_csv_row(self) -> dict[str, Any]:
-        return {
-            "schema_name": self.column.schema_name,
-            "table_name": self.column.table_name,
-            "column_name": self.column.column_name,
-            "data_type": self.column.data_type,
-            "status": self.decision.status,
-            "category": self.decision.category,
-            "confidence": f"{self.decision.confidence:.4f}",
-            "sensitive": str(self.decision.sensitive).upper(),
-            "masking_method": self.decision.masking_method,
-            "decided_by": self.decision.decided_by,
-            "notes": self.decision.notes,
-            "error": self.decision.error,
-            "reasoning": self.decision.reasoning,
-        }
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)

@@ -2,12 +2,17 @@ domain: healthcare
 confidence_threshold: 0.8
 sample_size: 20
 
+services:
+  data_reader_url: http://localhost:5001
+  classifiers:
+    - http://localhost:5002
+
 database:
   host: fx-pg16.dlpxdc.co           # or: PGHOST env var
   port: 5432                        # or: PGPORT env var
   dbname: healthcare                # or: PGDATABASE env var
   user: postgres                    # or: PGUSER env var
-  # password: ""                     # or: PGPASSWORD env var (use env var for security!)
+  # password: ""                    # or: PGPASSWORD env var (use env var for security!)
   sslmode: prefer                   # or: PGSSLMODE env var
 
 blacklist:
@@ -81,10 +86,10 @@ layer_2_rules:
     - UNKNOWN
 
 security_masking:
-  NAME: PSEUDONYMIZE
-  EMAIL: PARTIAL_MASK
+  NAME: FULL_NAME_ALGORITHM
+  EMAIL: EMAIL_UNIQUE
   PHONE: PARTIAL_MASK
   SSN: HASH
-  DATE_OF_BIRTH: REDACT
-  ADDRESS: REDACT
+  DATE_OF_BIRTH: DATE_SHIFT_DISCRETE
+  ADDRESS: ADDRESS_ALGORITHM
   ACCOUNT_NUMBER: HASH
