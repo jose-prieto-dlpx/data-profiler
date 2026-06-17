@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import logging
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -9,15 +8,12 @@ import requests
 from flask import Flask, jsonify, request
 
 from config_loader import ConfigLoader
+from logging_setup import create_json_logger
 from models import ClassificationResult
 from results_exporter import ResultsExporter
 
 app = Flask(__name__)
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-)
-logger = logging.getLogger(__name__)
+logger = create_json_logger("orchestrator_service")
 
 DEFAULT_CONFIG_PATH = "config/sample_healthcare.yaml"
 

@@ -381,23 +381,40 @@ Produced by the Classifier and aggregated by the Orchestrator.
 
 ---
 
-## Logging
+## Logging Architecture
 
-All three services use Python's standard `logging` with:
+All three services use a shared logger bootstrap in `logging_setup.py`.
 
-```
-%(asctime)s | %(levelname)s | %(name)s | %(message)s
-```
+### Goals
 
-- `INFO` for lifecycle events, schema fetches, and classifications.
-- `ERROR` for sample-read failures and classifier call failures.
-- `WARNING` for classified columns with no configured masking method.
-- `exception()` (ERROR + traceback) for unexpected failures.
+- Structured logs for machine parsing and centralized ingestion
+- Consistent fields across services
+- Minimal startup friction in local environments
 
-When started via `start-services.ps1`, each service's stdout and stderr are redirected to:
-- `logs/data_reader.log`
-- `logs/data_classifier.log`
-- `logs/orchestrator.log`
+### Runtime Behavior
+
+1. `create_json_logger(service_name)` ensures the local wheel path is available if needed.
+2. It tries `ConfigAndLogUtilities` first for logger creation (`log_mode=console`, `format_type=json`).
+3. If that import path is unavailable due to optional dependencies, it falls back to `log_manager.LogConfig`.
+4. Both paths emit JSON logs to stdout via `StreamHandler`.
+5. `start-services.ps1` redirects stdout/stderr to:
+  - `logs/data_reader.log`
+  - `logs/data_classifier.log`
+  - `logs/orchestrator.log`
+
+### JSON Fields
+
+Configured output includes:
+
+- `timestamp`
+- `levelname`
+- `name`
+- `module`
+- `lineno`
+- `message`
+- `traceback`
+
+This keeps existing log statements unchanged while standardizing output format.
 
 ---
 

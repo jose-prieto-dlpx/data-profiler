@@ -102,6 +102,14 @@ python orchestrator_service.py 5000 --config config/sample_healthcare.yaml
 
 ### Option 2: Startup Script
 
+Windows (PowerShell):
+
+```powershell
+.\start-services.ps1
+```
+
+Linux/Mac:
+
 ```bash
 ./start-services.sh
 ```
@@ -172,7 +180,7 @@ To handle large databases:
 
 - **POST /classify** ← `{"schema_name", "table_name", "column_name", "data_type", "config_path"}`
 - **POST /classify** → `{"schema_name", "table_name", "column_name", ..., "category", "confidence", "sensitive", "masking_method", ...}`
-- **POST /classify** (reader sample error) → `{"schema_name", "table_name", "column_name", "status": "ERROR", "category": "UNKNOWN", "confidence": 0.0, "decided_by": "data_reader", "error": "..."}`
+- **POST /classify** (reader sample error) → `{"schema_name", "table_name", "column_name", "status": "ERROR", "category": "UNKNOWN", "confidence": 0.0, "decided_by": "Data Reader - Sample Retrieval", "error": "..."}`
 
 ### Orchestrator
 
@@ -202,6 +210,15 @@ CSV file with columns:
 - `decided_by`, `notes`, `reasoning`, `error`
 
 Console output shows a pretty-printed summary (without `reasoning` and `error` fields).
+
+## Logging
+
+- Services now emit **JSON-formatted logs** through `delphix_ps_utilities`.
+- Logger bootstrap lives in `logging_setup.py` and is shared by all services.
+- Preferred path uses `ConfigAndLogUtilities.create_logger(...)` with `log_mode=console` and `format_type=json`.
+- If `ConfigAndLogUtilities` cannot load due to optional package dependencies, startup automatically falls back to `log_manager.LogConfig` (still JSON).
+- If `delphix_ps_utilities` is not globally installed, `logging_setup.py` loads the local wheel from `packages/delphix_ps_utilities-3-py3-none-any.whl`.
+- `start-services.ps1` redirects stdout/stderr to files under `logs/`, so each line in those files is a JSON log record.
 
 ---
 

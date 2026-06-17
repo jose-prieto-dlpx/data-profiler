@@ -172,21 +172,29 @@ For heavy loads, consider:
 
 ## Monitoring
 
-Each service logs to stdout. Redirect to files:
+Each service logs to stdout as JSON records using `delphix_ps_utilities`.
+You can redirect logs to files:
 
 ```cmd
-python data_reader_service.py 5001 --config config/sample_healthcare.yaml > logs/reader.log 2>&1
-python data_classifier_service.py 5002 --config config/sample_healthcare.yaml > logs/classifier.log 2>&1
+python data_reader_service.py 5001 --config config/sample_healthcare.yaml > logs/data_reader.log 2>&1
+python data_classifier_service.py 5002 --config config/sample_healthcare.yaml > logs/data_classifier.log 2>&1
 python orchestrator_service.py 5000 --config config/sample_healthcare.yaml > logs/orchestrator.log 2>&1
 ```
 
 Monitor logs in real-time:
 
 ```bash
-tail -f logs/reader.log
-tail -f logs/classifier.log
+tail -f logs/data_reader.log
+tail -f logs/data_classifier.log
 tail -f logs/orchestrator.log
 ```
+
+### Logging Implementation
+
+- Shared bootstrap: `logging_setup.py`
+- Preferred logger creation path: `ConfigAndLogUtilities.create_logger(...)`
+- Automatic fallback path: `log_manager.LogConfig` (also JSON) when optional dependencies for `ConfigAndLogUtilities` are unavailable
+- Local wheel fallback: `packages/delphix_ps_utilities-3-py3-none-any.whl` is auto-added to `sys.path` if the package is not installed
 
 ## Performance Tuning
 

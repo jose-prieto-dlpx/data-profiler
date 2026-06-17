@@ -81,6 +81,22 @@ curl -X POST http://localhost:5000/analyze ^
 
 Open `classification_output.csv` or `results.csv` in Excel/CSV viewer.
 
+### 5. Check JSON Logs
+
+When started with `start-services.ps1`, logs are written under `logs/` as JSON lines:
+
+- `logs/data_reader.log`
+- `logs/data_classifier.log`
+- `logs/orchestrator.log`
+
+Example log line:
+
+```json
+{"timestamp":"2026-06-17T15:35:10Z","levelname":"INFO","name":"data_reader_service_12345","module":"data_reader_service","lineno":42,"message":"Data reader initialized for config config/sample_healthcare.yaml","traceback":null}
+```
+
+Logging is configured in `logging_setup.py` using `delphix_ps_utilities` JSON formatter.
+
 ## Port Assignment
 
 | Service | Port | Role |
