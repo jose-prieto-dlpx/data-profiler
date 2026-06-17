@@ -15,6 +15,20 @@ def _ensure_delphix_path() -> None:
         sys.path.insert(0, str(wheel_path))
 
 
+class _ResolveMessageFilter(logging.Filter):
+    """Normalize %-style log messages so JSON formatters capture rendered text."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.args:
+            try:
+                record.msg = record.getMessage()
+                record.args = ()
+            except Exception:
+                # Keep original log record if formatting fails for any reason.
+                pass
+        return True
+
+
 def _create_with_config_and_log_utilities(service_name: str, debug: bool) -> logging.Logger | None:
     try:
         from delphix_ps_utilities.config_and_log_utilities import ConfigAndLogUtilities
@@ -49,6 +63,7 @@ def _create_with_config_and_log_utilities(service_name: str, debug: bool) -> log
     for handler in logger.handlers:
         if isinstance(handler, logging.StreamHandler):
             handler.stream = sys.stdout
+        handler.addFilter(_ResolveMessageFilter())
     logger.propagate = False
     return logger
 
@@ -77,6 +92,7 @@ def _create_with_log_manager(service_name: str, debug: bool) -> logging.Logger:
     for handler in logger.handlers:
         if isinstance(handler, logging.StreamHandler):
             handler.stream = sys.stdout
+        handler.addFilter(_ResolveMessageFilter())
     logger.propagate = False
     return logger
 
