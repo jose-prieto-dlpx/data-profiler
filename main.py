@@ -40,9 +40,9 @@ def main() -> int:
     try:
         cfg_mgr = ConfigManager.load_from_file(args.config)
 
-        dsn = build_dsn(args)
-        db_client = PostgresClient(dsn=cfg_mgr.config.database.to_dsn()
+        db_client = PostgresClient(dsn=cfg_mgr.config.database.to_dsn())
 
+        db_client.connect()
         columns = db_client.get_columns(args.schema)
         logger.info("Discovered %d columns in schema '%s'.", len(columns), args.schema)
 
@@ -59,8 +59,8 @@ def main() -> int:
         exporter = ExportManager()
         exporter.write_csv(results, args.output)
 
-        csv_text = exporter.results_to_csv_text(results)
-        print(csv_text)
+        pretty_text = exporter.results_to_pretty_text(results)
+        print(pretty_text)
 
         logger.info("Classification finished. CSV written to '%s'.", args.output)
         return 0

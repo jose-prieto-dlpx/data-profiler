@@ -68,6 +68,8 @@ class DatabaseConfig:
 class Layer2Config:
     provider: str = "none"
     model: str = ""
+    country: str = ""
+    url: str = "http://localhost:11434/api/generate"
     temperature: float = 0.0
     timeout_seconds: int = 30
     max_tokens: int = 256
@@ -111,7 +113,7 @@ class ConfigManager:
             blacklist=_parse_blacklist(raw.get("blacklist", {})),
             layer_0_rules=_parse_layer0(raw.get("layer_0_rules", [])),
             layer_1_rules=_parse_layer1(raw.get("layer_1_rules", [])),
-            layer_2=_parse_layer2(raw.get("layer_2_rules", {})),
+            layer_2=_parse_layer2(raw.get("layer_2_rules", {}), raw.get("country", "")),
             security_masking={
                 str(k).upper(): str(v).upper()
                 for k, v in (raw.get("security_masking", {}) or {}).items()
@@ -181,11 +183,13 @@ def _parse_layer1(raw: list[dict]) -> list[Layer1Rule]:
     return parsed
 
 
-def _parse_layer2(raw: dict) -> Layer2Config:
+def _parse_layer2(raw: dict, default_country: str = "") -> Layer2Config:
     labels = [str(v).upper() for v in raw.get("valid_labels", [])]
     return Layer2Config(
         provider=str(raw.get("provider", "none")).lower(),
         model=str(raw.get("model", "")),
+        country=str(raw.get("country", default_country)),
+        url=str(raw.get("url", "http://localhost:11434/api/generate")),
         temperature=float(raw.get("temperature", 0.0)),
         timeout_seconds=int(raw.get("timeout_seconds", 30)),
         max_tokens=int(raw.get("max_tokens", 256)),

@@ -1,6 +1,6 @@
 # Automated Data Classification and Masking Pipeline
 
-A robust, modular Python system for analyzing PostgreSQL database schemas, classifying columns by data sensitivity using multi-layer heuristics and LLM fallback, and generating actionable masking recommendations.
+A robust, modular Python system for analyzing database schemas, classifying columns by data sensitivity using multi-layer heuristics and LLM fallback, and generating actionable masking recommendations.
 
 ## Features
 
@@ -19,7 +19,7 @@ A robust, modular Python system for analyzing PostgreSQL database schemas, class
 ### Module Breakdown
 
 | Module | Purpose |
-|--------|---------|
+| ------ | ------- |
 | `models.py` | Typed dataclasses for metadata, decisions, and pipeline results |
 | `database_generic.py` | Abstract database interface (connect, schema introspection, sampling) |
 | `database_postgres.py` | PostgreSQL concrete implementation with pooling and safe SQL composition |
@@ -64,20 +64,23 @@ CSV Row Output
 ### Setup
 
 1. **Clone/download the project** and navigate to the directory:
+
    ```bash
    cd Profiler-demo
    ```
 
 2. **Create a virtual environment** (optional but recommended):
+
    ```bash
-   D:/Python/Python3104/python.exe -m venv venv
+   python.exe -m venv venv
    venv/Scripts/activate  # On Windows
    # or: source venv/bin/activate  # On macOS/Linux
    ```
 
 3. **Install dependencies**:
+
    ```bash
-   D:/Python/Python3104/python.exe -m pip install -r requirements.txt
+   python.exe -m pip install -r requirements.txt
    ```
 
 ## Configuration

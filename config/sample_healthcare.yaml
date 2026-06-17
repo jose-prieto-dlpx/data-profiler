@@ -3,11 +3,11 @@ confidence_threshold: 0.8
 sample_size: 20
 
 database:
-  host: localhost                   # or: PGHOST env var
+  host: fx-pg16.dlpxdc.co           # or: PGHOST env var
   port: 5432                        # or: PGPORT env var
-  dbname: postgres                  # or: PGDATABASE env var
+  dbname: healthcare                # or: PGDATABASE env var
   user: postgres                    # or: PGUSER env var
-  password: ""                      # or: PGPASSWORD env var (use env var for security!)
+  # password: ""                     # or: PGPASSWORD env var (use env var for security!)
   sslmode: prefer                   # or: PGSSLMODE env var
 
 blacklist:
@@ -16,20 +16,21 @@ blacklist:
   columns:
     - created_at
     - updated_at
+    - claim_amount
   table_columns:
     - table: users
       column: password_hash
 
 layer_0_rules:
-  - table_name: patients
+  - table_name: customers
     column_name: first_name
     category: NAME
     confidence: 0.98
-  - table_name: patients
+  - table_name: customers
     column_name: last_name
     category: NAME
     confidence: 0.98
-  - table_regex: ".*patient.*"
+  - table_regex: ".*customer.*"
     column_regex: ".*ssn.*"
     category: SSN
     confidence: 0.95
@@ -50,19 +51,23 @@ layer_1_rules:
     confidence: 0.97
   - category: DATE_OF_BIRTH
     regex: "^(19|20)\\d{2}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
-    confidence: 0.86
+    confidence: 0.86  
 
 layer_2_rules:
-  provider: none
-  model: ""
+  provider: ollama
+  model: "phi4-mini"
+  country: "US"
+  url: "http://data-generator.dlpxdc.co:11434/api/generate"
   temperature: 0.0
-  timeout_seconds: 30
+  timeout_seconds: 90
   max_tokens: 256
   system_prompt_template: |
-    You are a strict data-classification model for the {domain} domain.
+    You are a strict data-classification model for the {domain} domain in the {country} country. 
+    You are given a database column and a sample of its values. 
+    Your task is to classify the column into one of the following categories: {valid_labels}.             
     You MUST classify database columns using only these labels: {valid_labels}.
     Return JSON only, with this exact schema:
-    {"category": "<LABEL>", "confidence": <0_to_1_float>}
+    {"category": "<LABEL>", "confidence": <0_to_1_float>, "reasoning": "<explanation of your reasoning>"}
     Do not include extra keys or explanatory text.
   valid_labels:
     - NAME

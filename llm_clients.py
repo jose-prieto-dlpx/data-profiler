@@ -127,7 +127,7 @@ class OllamaLLMClient(LLMClient):
         }
 
         req = request.Request(
-            url="http://localhost:11434/api/generate",
+            url=self._cfg.url,
             data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json"},
             method="POST",
@@ -170,9 +170,11 @@ def _build_prompts(
 ) -> tuple[str, str]:
     labels = valid_labels or cfg.valid_labels
     labels_text = ", ".join(labels)
-    system_prompt = cfg.system_prompt_template.format(
-        domain=domain,
-        valid_labels=labels_text,
+    system_prompt = (
+        cfg.system_prompt_template
+        .replace("{domain}", domain)
+        .replace("{country}", cfg.country)
+        .replace("{valid_labels}", labels_text)
     )
 
     clipped_samples = sample_values[:20]
@@ -181,6 +183,7 @@ def _build_prompts(
         "category (string) and confidence (float in [0,1]).\n"
         f"table: {table_name}\n"
         f"column: {column_name}\n"
+        f"country: {cfg.country}\n"
         f"samples: {json.dumps(clipped_samples, ensure_ascii=True)}\n"
         f"valid_labels: {json.dumps(labels, ensure_ascii=True)}"
     )
@@ -212,6 +215,7 @@ def _decision_from_payload(
 ) -> ClassificationDecision:
     raw_category = str(payload.get("category", "UNKNOWN")).upper()
     confidence = payload.get("confidence", 0.0)
+    reasoning = str(payload.get("reasoning", ""))
 
     try:
         score = max(0.0, min(1.0, float(confidence)))
@@ -225,6 +229,7 @@ def _decision_from_payload(
             confidence=0.0,
             decided_by="layer_2",
             notes=f"LLM returned category '{raw_category}' not in closed label list.",
+            reasoning=reasoning,
         )
 
     return ClassificationDecision(
@@ -232,4 +237,5 @@ def _decision_from_payload(
         category=raw_category,
         confidence=score,
         decided_by="layer_2",
+        reasoning=reasoning,
     )

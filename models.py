@@ -23,6 +23,7 @@ class ClassificationDecision:
     masking_method: str = ""
     notes: str = ""
     error: str = ""
+    reasoning: str = ""
 
 
 @dataclass
@@ -44,4 +45,5 @@ class PipelineResult:
             "decided_by": self.decision.decided_by,
             "notes": self.decision.notes,
             "error": self.decision.error,
+            "reasoning": self.decision.reasoning,
         }
