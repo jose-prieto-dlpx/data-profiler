@@ -48,6 +48,7 @@ coverage.xml
 *.py,cover
 .hypothesis/
 .pytest_cache/
+testing
 
 # Translations
 *.mo
@@ -144,3 +145,5 @@ classification_output.csv
 temp/
 tmp/
 logs/
+
+*.pptx
